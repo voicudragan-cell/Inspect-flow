@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>InspectFlow - Quality Inspection Workflow</title>
 <script src="/vendor/html2pdf.bundle.min.js"></script>
-<meta name="description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, Google Drive sync, and IQAS downloadable reports.">
+<meta name="description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, Google Drive sync, Gmail integration, and IQAS downloadable reports.">
 <meta property="og:title" content="InspectFlow">
-<meta property="og:description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, Google Drive sync, and IQAS downloadable reports.">
+<meta property="og:description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, Google Drive sync, Gmail integration, and IQAS downloadable reports.">
 <style>
 :root{
   --bg:#f7f7f2; --panel:#ffffff; --ink:#14231c; --sub:#5c6b62; --line:#e2e3dd;
@@ -385,11 +385,73 @@ async function initFirebase(){
   }
 }
 
+// Google Workspace Integration: Drive & Gmail
+const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://mail.google.com/',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.modify'
+];
+
+function createGoogleWorkspaceProvider(loginHint) {
+  const provider = new GoogleAuthProvider();
+  WORKSPACE_SCOPES.forEach(s => provider.addScope(s));
+  const hint = loginHint || (currentUser?.email) || getPrimaryApproverEmail() || 's.niktinat@interqas.com';
+  if (hint) {
+    provider.setCustomParameters({ login_hint: hint });
+  }
+  return provider;
+}
+
+// Gmail URL Builder: opens web Gmail compose in the designated account
+function buildGmailComposeUrl({ to, cc, subject, body, authUser }){
+  const user = authUser || getPrimaryApproverEmail() || 's.niktinat@interqas.com';
+  let url = `https://mail.google.com/mail/u/${encodeURIComponent(user)}/?view=cm&fs=1&to=${encodeURIComponent(to || '')}&su=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body || '')}`;
+  if(cc) url += `&cc=${encodeURIComponent(cc)}`;
+  url += `&authuser=${encodeURIComponent(user)}`;
+  return url;
+}
+
+// Direct Gmail API Sender (RFC 2822 format base64url encoded)
+async function sendEmailViaGmailApi({ to, cc, subject, body, accessToken }){
+  const emailLines = [];
+  emailLines.push(`To: ${to}`);
+  if(cc) emailLines.push(`Cc: ${cc}`);
+  // Encode subject in UTF-8 base64
+  emailLines.push(`Subject: =?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`);
+  emailLines.push('MIME-Version: 1.0');
+  emailLines.push('Content-Type: text/plain; charset=utf-8');
+  emailLines.push('Content-Transfer-Encoding: 7bit');
+  emailLines.push('');
+  emailLines.push(body);
+
+  const rawEmail = emailLines.join('\r\n');
+  const base64Encoded = btoa(unescape(encodeURIComponent(rawEmail)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ raw: base64Encoded })
+  });
+
+  if(!res.ok){
+    const errText = await res.text();
+    throw new Error(`Gmail API response (${res.status}): ${errText}`);
+  }
+  return await res.json();
+}
+
 async function reacquireDriveToken(){
   if (!auth) return null;
   try {
-    const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    const provider = createGoogleWorkspaceProvider();
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
@@ -407,7 +469,7 @@ async function reacquireDriveToken(){
       return cachedAccessToken;
     }
   } catch (err) {
-    console.warn('Re-acquisition of Drive token cancelled or failed:', err);
+    console.warn('Re-acquisition of Workspace token cancelled or failed:', err);
   }
   return null;
 }
@@ -417,8 +479,7 @@ async function signInGoogle(){
     alert('Authentication service is initializing. Please try again in a moment.');
     return;
   }
-  const provider = new GoogleAuthProvider();
-  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  const provider = createGoogleWorkspaceProvider();
   isSigningIn = true;
   try {
     const result = await signInWithPopup(auth, provider);
@@ -435,7 +496,7 @@ async function signInGoogle(){
       displayName: currentUser.displayName,
       uid: currentUser.uid
     }));
-    alert(`Connected to Google Drive as ${currentUser.email}! This connection will be maintained until you choose to sign out.`);
+    alert(`Connected to Google Drive & Gmail as ${currentUser.email}! This connection will be maintained until you choose to sign out.`);
     renderAuthSection();
     updateSyncBadge();
     render();
@@ -1904,16 +1965,14 @@ async function submitReportForApproval(r){
     (driveLink ? `\nGoogle Drive Report Link: ${driveLink}\n` : `\n(The formatted PDF inspection report has been generated to attach to this email)\n`) +
     `\nPlease review and approve this inspection report in InspectFlow. Once approved, the status will update to COMPLETED.`;
 
-  const mailtoUrl = `mailto:${encodeURIComponent(targetEmail)}?subject=${subject}${ccParam}&body=${encodeURIComponent(bodyText)}`;
-
-  // Show notification modal with mailto trigger & copy draft fallback
+  // Show notification modal with Gmail compose & Gmail API direct send
   showEmailNoticeModal({
     title: 'Report Submitted for Manager Approval',
     recipient: targetEmail,
+    senderEmail: 's.niktinat@interqas.com',
     cc: otherEmails.join(', '),
     subject: `[SUBMITTED FOR APPROVAL] ${r.header.reportName}`,
     body: bodyText,
-    mailtoUrl: mailtoUrl,
     driveLink: driveLink
   });
 
@@ -1922,7 +1981,7 @@ async function submitReportForApproval(r){
   render();
 }
 
-// "Send to inspector" button fix & action
+// "Send to inspector" button fix & action - explicitly sends from assigner s.niktinat@interqas.com
 async function sendToInspectorAction(r){
   const email = (r.header.inspectorEmail || '').trim();
   const name = (r.header.inspector || '').trim();
@@ -1959,59 +2018,127 @@ async function sendToInspectorAction(r){
     (driveLink ? `\nGoogle Drive Link: ${driveLink}\n` : `\n(The formatted report file has been downloaded and can be attached to this email)\n`) +
     `\nPlease complete the required checkpoints and submit the record for approval.`;
 
-  const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
-
   showEmailNoticeModal({
     title: `Send Assignment to Inspector (${email})`,
     recipient: email,
+    senderEmail: 's.niktinat@interqas.com',
+    cc: '',
     subject: subject,
     body: bodyText,
-    mailtoUrl: mailtoUrl,
     driveLink: driveLink
   });
 }
 
-function showEmailNoticeModal({title, recipient, cc, subject, body, mailtoUrl, driveLink}){
-  // Try opening mailto directly via anchor click
-  const a = document.createElement('a');
-  a.href = mailtoUrl;
-  a.target = '_blank';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body, driveLink}){
+  const assignerEmail = senderEmail || getPrimaryApproverEmail() || 's.niktinat@interqas.com';
+  const gmailUrl = buildGmailComposeUrl({
+    to: recipient,
+    cc: cc || '',
+    subject: subject,
+    body: body,
+    authUser: assignerEmail
+  });
 
-  // Also display friendly modal in case popup/protocol handlers are restricted in iframe
+  // Automatically open directly in Gmail in a new tab instead of invoking OS mailto/Outlook
+  try {
+    const newTab = window.open(gmailUrl, '_blank');
+    if (newTab) newTab.focus();
+  } catch(e) {
+    console.warn('Popup blocked:', e);
+  }
+
+  // Display friendly modal with direct Gmail actions
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:620px;">
       <div class="between" style="margin-bottom:12px;">
-        <h2 style="margin:0;font-size:20px;">${esc(title)}</h2>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#ea4335"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          <h2 style="margin:0;font-size:18px;">${esc(title)}</h2>
+        </div>
         <button class="iconbtn" id="closeNoticeModal" style="font-size:18px;">✕</button>
       </div>
-      <p class="hint" style="font-size:13px;margin-bottom:14px;">
-        The report has been downloaded. If your email client didn't open automatically, use the buttons below:
-      </p>
-      <div class="card" style="background:var(--bg);padding:14px;font-size:13px;">
-        <div><b>To:</b> ${esc(recipient)}</div>
-        ${cc ? `<div style="margin-top:4px;"><b>CC (Distribution):</b> ${esc(cc)}</div>` : ''}
+
+      <div style="background:#e8f0fe;border:1px solid #c2e7ff;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#174ea6;">
+        Opening Gmail compose under <b>${esc(assignerEmail)}</b>. You can also send directly using the Gmail API below.
+      </div>
+
+      <div class="card" style="background:var(--bg);padding:12px 14px;font-size:13px;border:1px solid var(--line);">
+        <div><b>Sender Account:</b> <span style="font-family:monospace;color:var(--accent);">${esc(assignerEmail)}</span></div>
+        <div style="margin-top:4px;"><b>To:</b> <span style="font-family:monospace;">${esc(recipient)}</span></div>
+        ${cc ? `<div style="margin-top:4px;"><b>CC (Distribution):</b> <span style="font-family:monospace;">${esc(cc)}</span></div>` : ''}
         <div style="margin-top:4px;"><b>Subject:</b> ${esc(subject)}</div>
         ${driveLink ? `<div style="margin-top:6px;"><a href="${esc(driveLink)}" target="_blank" class="drive-badge">View in Google Drive ↗</a></div>` : ''}
-        <div style="margin-top:10px;white-space:pre-wrap;font-family:monospace;background:#fff;padding:10px;border-radius:6px;border:1px solid var(--line);max-height:180px;overflow-y:auto;">${esc(body)}</div>
+        <div style="margin-top:10px;white-space:pre-wrap;font-family:monospace;background:#fff;padding:10px;border-radius:6px;border:1px solid var(--line);max-height:160px;overflow-y:auto;font-size:12px;line-height:1.4;">${esc(body)}</div>
       </div>
-      <div class="row" style="margin-top:16px;justify-content:flex-end;">
+
+      <div class="between" style="margin-top:16px;flex-wrap:wrap;gap:8px;">
         <button class="btn btn-outline" id="copyBodyBtn">📋 Copy Email Text</button>
-        <a href="${esc(mailtoUrl)}" target="_blank" class="btn btn-primary" style="text-decoration:none;">✉ Open Email Client</a>
+        <div class="row">
+          <button class="btn btn-dark" id="modalGmailApiSendBtn" style="background:#202124;color:#fff;">
+            🚀 Send via Gmail API
+          </button>
+          <a href="${esc(gmailUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="background:#ea4335;border-color:#ea4335;text-decoration:none;">
+            ✉ Open in Gmail
+          </a>
+        </div>
       </div>
     </div>`;
 
   document.body.appendChild(overlay);
   document.getElementById('closeNoticeModal').addEventListener('click', () => overlay.remove());
+
   document.getElementById('copyBodyBtn').addEventListener('click', () => {
-    const fullText = `To: ${recipient}${cc ? `\nCC: ${cc}` : ''}\nSubject: ${subject}\n\n${body}`;
+    const fullText = `From: ${assignerEmail}\nTo: ${recipient}${cc ? `\nCC: ${cc}` : ''}\nSubject: ${subject}\n\n${body}`;
     navigator.clipboard.writeText(fullText).then(() => {
       alert('Email content copied to clipboard!');
     });
+  });
+
+  document.getElementById('modalGmailApiSendBtn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    // Explicit user confirmation per Workspace Integration guidelines
+    const confirmed = confirm(`Confirm sending this email message directly via Gmail to ${recipient}${cc ? ' (CC: ' + cc + ')' : ''}?`);
+    if(!confirmed) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      let token = cachedAccessToken;
+      if(!token) {
+        token = await reacquireDriveToken();
+      }
+      if(!token) {
+        alert('Please connect Google Account to send via Gmail API.');
+        await signInGoogle();
+        token = cachedAccessToken;
+      }
+      if(!token) {
+        btn.disabled = false;
+        btn.textContent = '🚀 Send via Gmail API';
+        return;
+      }
+
+      await sendEmailViaGmailApi({
+        to: recipient,
+        cc: cc || '',
+        subject: subject,
+        body: body,
+        accessToken: token
+      });
+
+      btn.textContent = '✓ Sent via Gmail!';
+      btn.style.background = '#2e5b32';
+      btn.disabled = true;
+      alert(`✓ Email successfully sent via Gmail API to ${recipient}!`);
+    } catch(err) {
+      console.error('Gmail send error:', err);
+      btn.disabled = false;
+      btn.textContent = '🚀 Send via Gmail API';
+      alert('Could not dispatch through Gmail API: ' + (err.message || err) + '\n\nPlease click "Open in Gmail" to send directly from web Gmail.');
+    }
   });
 }
 
@@ -2571,32 +2698,32 @@ function viewSettings(){
     <p>Configure automated report distribution lists, Google Drive sync persistence, and management approver settings. All changes save automatically.</p>
   </div>
 
-  <!-- Google Drive Storage Integration -->
+  <!-- Google Workspace Integration: Drive & Gmail -->
   <div class="card">
     <div class="between">
       <div>
-        <div class="small">Google Drive Storage Integration</div>
-        <h2 style="margin:4px 0 2px;">Google Drive Folder: "Reports Data"</h2>
-        <p class="hint">Authenticated users automatically sync inspection files to the "Reports Data" folder. Once linked, the connection persists until you choose to disconnect.</p>
+        <div class="small">Google Workspace Integration</div>
+        <h2 style="margin:4px 0 2px;">Google Drive &amp; Gmail Integration</h2>
+        <p class="hint">Syncs inspection archives to Google Drive ("Reports Data" folder) and dispatches emails directly via Gmail (assigner: <b>s.niktinat@interqas.com</b>).</p>
       </div>
       <div>
         ${isDrive ? `
-          <button class="btn btn-outline" id="settingsSignOut">Disconnect Drive</button>
+          <button class="btn btn-outline" id="settingsSignOut">Disconnect Workspace</button>
         ` : `
-          <button class="btn btn-drive" id="settingsSignIn">Connect Google Drive</button>
+          <button class="btn btn-drive" id="settingsSignIn">Connect Google Workspace</button>
         `}
       </div>
     </div>
     <div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <div>
         ${isDrive ? `
-          <span style="color:var(--accent);font-weight:600;">✓ Connected as ${esc(currentUser?.email || 'Authorized Owner')}</span> · Destination: <b>Google Drive &gt; Reports Data</b>
+          <span style="color:var(--accent);font-weight:600;">✓ Connected as ${esc(currentUser?.email || 'Authorized Owner')}</span> · Destination: <b>Google Drive &gt; Reports Data</b> · Email: <b>Gmail API Enabled</b>
           <div style="color:var(--sub);font-size:12px;margin-top:2px;">Session is maintained permanently across browser restarts until explicit sign out.</div>
         ` : `
-          <span style="color:var(--sub);">Not connected to Google Drive. Click "Connect Google Drive" to enable cloud synchronization in "Reports Data".</span>
+          <span style="color:var(--sub);">Not connected to Google Workspace. Click "Connect Google Workspace" to enable cloud storage and direct Gmail sending.</span>
         `}
       </div>
-      ${isDrive ? `<span class="badge b-completed">Active Drive Session</span>` : `<span class="badge b-not_started">Disconnected</span>`}
+      ${isDrive ? `<span class="badge b-completed">Active Workspace Session</span>` : `<span class="badge b-not_started">Disconnected</span>`}
     </div>
   </div>
 
