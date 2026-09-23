@@ -1,6 +1,6 @@
 {
   "name": "InspectFlow",
-  "description": "Quality inspection workflow application with customizable templates, step-by-step inspection wizard, and downloadable reports.",
+  "description": "Quality inspection workflow application with customizable templates, step-by-step inspection wizard, Google Drive sync, and IQAS downloadable reports.",
   "permissions": [],
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
