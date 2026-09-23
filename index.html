@@ -407,10 +407,28 @@ function createGoogleWorkspaceProvider(loginHint) {
 // Gmail URL Builder: opens web Gmail compose in the designated account
 function buildGmailComposeUrl({ to, cc, subject, body, authUser }){
   const user = authUser || getPrimaryApproverEmail() || 's.niktinat@interqas.com';
-  let url = `https://mail.google.com/mail/u/${encodeURIComponent(user)}/?view=cm&fs=1&to=${encodeURIComponent(to || '')}&su=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body || '')}`;
-  if(cc) url += `&cc=${encodeURIComponent(cc)}`;
-  url += `&authuser=${encodeURIComponent(user)}`;
-  return url;
+  const params = new URLSearchParams();
+  params.set('view', 'cm');
+  params.set('fs', '1');
+  if(to) params.set('to', to);
+  if(cc) params.set('cc', cc);
+  if(subject) params.set('su', subject);
+  if(body) params.set('body', body);
+  if(user) params.set('authuser', user);
+
+  return `https://mail.google.com/mail/?${params.toString()}`;
+}
+
+function buildGmailComposeGenericUrl({ to, cc, subject, body }){
+  const params = new URLSearchParams();
+  params.set('view', 'cm');
+  params.set('fs', '1');
+  if(to) params.set('to', to);
+  if(cc) params.set('cc', cc);
+  if(subject) params.set('su', subject);
+  if(body) params.set('body', body);
+
+  return `https://mail.google.com/mail/?${params.toString()}`;
 }
 
 // Direct Gmail API Sender (RFC 2822 format base64url encoded)
@@ -756,6 +774,12 @@ const app = document.getElementById('app');
 
 function setView(v){
   state.view = v;
+  if(v !== 'wizard'){
+    try {
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch(e){}
+  }
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('active', b.dataset.view===v));
   render();
 }
@@ -899,7 +923,67 @@ function openReport(id){
   } else {
     state.wizStep = -1;
   }
+  try {
+    const cleanUrl = `${window.location.origin}${window.location.pathname}?reportId=${encodeURIComponent(id)}`;
+    window.history.replaceState({ reportId: id }, document.title, cleanUrl);
+  } catch(e){}
   setView('wizard');
+}
+
+// Generate direct link to access the report in the web app
+function getDirectReportUrl(report){
+  if(!report) return window.location.href;
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}?reportId=${encodeURIComponent(report.id)}`;
+}
+
+// Check incoming URL for direct report link (?reportId=... or #data=...)
+function handleInitialUrlRouting(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+    let targetReportId = params.get('reportId') || params.get('report') || params.get('id');
+    const hash = window.location.hash || '';
+
+    // Check if report data is embedded in hash
+    if(hash.includes('data=')){
+      try {
+        const rawData = hash.split('data=')[1].split('&')[0];
+        const jsonStr = decodeURIComponent(escape(atob(decodeURIComponent(rawData))));
+        const importedReport = JSON.parse(jsonStr);
+        if(importedReport && importedReport.id){
+          targetReportId = importedReport.id;
+          const existingIndex = DB.reports.findIndex(x => x.id === importedReport.id);
+          if(existingIndex >= 0){
+            if(!DB.reports[existingIndex].phases || (importedReport.updatedAt && DB.reports[existingIndex].updatedAt < importedReport.updatedAt)){
+              DB.reports[existingIndex] = importedReport;
+              saveLocal();
+            }
+          } else {
+            DB.reports.unshift(importedReport);
+            saveLocal();
+          }
+        }
+      } catch(err) {
+        console.warn('Could not unpack report from URL hash:', err);
+      }
+    }
+
+    if(!targetReportId && hash){
+      const match = hash.match(/report[=\/]([a-zA-Z0-9_-]+)/);
+      if(match) targetReportId = match[1];
+    }
+
+    if(targetReportId){
+      const rep = DB.reports.find(r => r.id === targetReportId);
+      if(rep){
+        openReport(targetReportId);
+        return true;
+      }
+    }
+  } catch(e) {
+    console.warn('URL routing error:', e);
+  }
+  return false;
 }
 
 // 2. DASHBOARD VIEW
@@ -1195,6 +1279,7 @@ function viewWizard(){
       <button class="btn btn-ghost" id="backHomeBtn">← Workspace</button>
       <button class="btn btn-outline" id="previewLayoutBtn">👁 Preview Report</button>
       <button class="btn btn-outline" id="topPdfBtn">📄 Download PDF</button>
+      <button class="btn btn-outline" id="copyAppLinkBtn" title="Copy direct link to open this report in the app">🔗 Copy App Link</button>
     </div>
     <div class="row">
       ${isDriveConnected() ? `
@@ -1222,6 +1307,14 @@ function viewWizard(){
   });
   document.getElementById('previewLayoutBtn')?.addEventListener('click', () => showReportModal(r));
   document.getElementById('topPdfBtn')?.addEventListener('click', (e) => downloadPdfReport(r, e.currentTarget));
+  document.getElementById('copyAppLinkBtn')?.addEventListener('click', () => {
+    const url = getDirectReportUrl(r);
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('✓ Direct app report link copied to clipboard!', 'success');
+    }).catch(() => {
+      prompt('Copy this direct report link:', url);
+    });
+  });
   document.getElementById('connectDriveBtn')?.addEventListener('click', signInGoogle);
   document.getElementById('saveDriveBtn')?.addEventListener('click', async () => {
     try {
@@ -1889,7 +1982,30 @@ function wireStepEvents(r, currentStep){
       r.approval.comments = comments;
       r.updatedAt = Date.now();
       saveReport(r);
-      alert('Report status set back to In Progress. Inspector notified for revision.');
+
+      if(r.header.inspectorEmail){
+        const directAppUrl = getDirectReportUrl(r);
+        const subject = `Revision Requested: ${r.header.reportName} (PO: ${r.header.po || 'N/A'})`;
+        const bodyText = `Dear ${r.header.inspector || 'Inspector'},\n\n` +
+          `Your inspection report "${r.header.reportName}" has been reviewed by management and returned for revision.\n\n` +
+          `Manager Reviewer: ${r.approval.approverName} (${r.approval.approverEmail})\n` +
+          `Revision Comments / Required Changes:\n${comments}\n\n` +
+          `DIRECT ACCESS TO REPORT IN APP:\n${directAppUrl}\n\n` +
+          `Please click the direct link above to update the record in InspectFlow and re-submit once completed.`;
+
+        showEmailNoticeModal({
+          title: `Notify Inspector of Revision (${r.header.inspectorEmail})`,
+          recipient: r.header.inspectorEmail,
+          senderEmail: r.approval.approverEmail || 's.niktinat@interqas.com',
+          cc: '',
+          subject: subject,
+          body: bodyText,
+          driveLink: r.driveViewLink || '',
+          appReportUrl: directAppUrl
+        });
+      } else {
+        alert('Report status set back to In Progress. Inspector notified for revision.');
+      }
       render();
     });
   }
@@ -1950,9 +2066,9 @@ async function submitReportForApproval(r){
   downloadPdfReport(r);
 
   // Dispatch email to target approver with CC to distribution list
+  const directAppUrl = getDirectReportUrl(r);
   const otherEmails = (settings.emails || []).filter(e => e.toLowerCase() !== targetEmail.toLowerCase());
-  const ccParam = otherEmails.length > 0 ? `&cc=${encodeURIComponent(otherEmails.join(','))}` : '';
-  const subject = encodeURIComponent(`[SUBMITTED FOR APPROVAL] ${r.header.reportName} - PO: ${r.header.po || 'N/A'}`);
+  const subject = `[SUBMITTED FOR APPROVAL] ${r.header.reportName} - PO: ${r.header.po || 'N/A'}`;
   const bodyText = `Inspection Report Submitted for Management Approval\n\n` +
     `Report: ${r.header.reportName}\n` +
     `Supplier: ${r.header.customer || '-'}\n` +
@@ -1962,6 +2078,7 @@ async function submitReportForApproval(r){
     `Inspection Decision: ${r.decision}\n` +
     `Date: ${fmtDate(r.header.date)}\n` +
     (otherEmails.length > 0 ? `Distribution (CC): ${otherEmails.join(', ')}\n` : '') +
+    `\nDIRECT ACCESS TO REPORT IN APP:\n${directAppUrl}\n` +
     (driveLink ? `\nGoogle Drive Report Link: ${driveLink}\n` : `\n(The formatted PDF inspection report has been generated to attach to this email)\n`) +
     `\nPlease review and approve this inspection report in InspectFlow. Once approved, the status will update to COMPLETED.`;
 
@@ -1971,9 +2088,11 @@ async function submitReportForApproval(r){
     recipient: targetEmail,
     senderEmail: 's.niktinat@interqas.com',
     cc: otherEmails.join(', '),
-    subject: `[SUBMITTED FOR APPROVAL] ${r.header.reportName}`,
+    subject: subject,
     body: bodyText,
-    driveLink: driveLink
+    driveLink: driveLink,
+    appReportUrl: directAppUrl,
+    onDownloadAttachment: () => downloadPdfReport(r)
   });
 
   // Navigate to approval step
@@ -1983,6 +2102,13 @@ async function submitReportForApproval(r){
 
 // "Send to inspector" button fix & action - explicitly sends from assigner s.niktinat@interqas.com
 async function sendToInspectorAction(r){
+  ['reportName','customer','projectName','po','partNumbers','itemDesc','batchNumber','totalQty','batchQty','sampleSize','inspector','inspectorEmail','location','serviceProvider'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) r.header[id] = el.value.trim();
+  });
+  const dateEl = document.getElementById('date');
+  if(dateEl && dateEl.value) r.header.date = dateEl.value;
+
   const email = (r.header.inspectorEmail || '').trim();
   const name = (r.header.inspector || '').trim();
   if(!email){
@@ -1991,10 +2117,16 @@ async function sendToInspectorAction(r){
     return;
   }
   
+  const sendBtn = document.getElementById('sendInspectorBtn');
+  if(sendBtn){
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Preparing email…';
+  }
+
   saveReport(r);
 
   let driveLink = '';
-  if(cachedAccessToken){
+  if(isDriveConnected()){
     try{
       const res = await uploadReportToDrive(r, cachedAccessToken);
       driveLink = res.webViewLink || '';
@@ -2003,10 +2135,13 @@ async function sendToInspectorAction(r){
     }
   }
 
-  // Trigger download
-  downloadReport(r);
+  if(sendBtn){
+    sendBtn.disabled = false;
+    sendBtn.textContent = '✉ Send to Inspector';
+  }
 
-  const subject = `Inspection Assignment / Draft: ${r.header.reportName} (PO: ${r.header.po || 'N/A'})`;
+  const directAppUrl = getDirectReportUrl(r);
+  const subject = `Inspection Assignment: ${r.header.reportName} (PO: ${r.header.po || 'N/A'})`;
   const bodyText = `Dear ${name || 'Inspector'},\n\n` +
     `Please find the inspection record details for your assignment:\n\n` +
     `Report: ${r.header.reportName}\n` +
@@ -2014,9 +2149,10 @@ async function sendToInspectorAction(r){
     `Project: ${r.header.projectName || '-'}\n` +
     `PO Number: ${r.header.po || '-'}\n` +
     `Location: ${r.header.location || '-'}\n` +
-    `Scheduled Date: ${fmtDate(r.header.date)}\n` +
-    (driveLink ? `\nGoogle Drive Link: ${driveLink}\n` : `\n(The formatted report file has been downloaded and can be attached to this email)\n`) +
-    `\nPlease complete the required checkpoints and submit the record for approval.`;
+    `Scheduled Date: ${fmtDate(r.header.date)}\n\n` +
+    `DIRECT ACCESS TO REPORT IN APP:\n${directAppUrl}\n` +
+    (driveLink ? `\nGoogle Drive Backup: ${driveLink}\n` : '') +
+    `\nPlease click the direct link above to open this report in the InspectFlow app, complete the required checkpoints, and submit the record for approval.`;
 
   showEmailNoticeModal({
     title: `Send Assignment to Inspector (${email})`,
@@ -2025,11 +2161,13 @@ async function sendToInspectorAction(r){
     cc: '',
     subject: subject,
     body: bodyText,
-    driveLink: driveLink
+    driveLink: driveLink,
+    appReportUrl: directAppUrl,
+    onDownloadAttachment: () => downloadReport(r)
   });
 }
 
-function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body, driveLink}){
+function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body, driveLink, appReportUrl, onDownloadAttachment}){
   const assignerEmail = senderEmail || getPrimaryApproverEmail() || 's.niktinat@interqas.com';
   const gmailUrl = buildGmailComposeUrl({
     to: recipient,
@@ -2038,20 +2176,18 @@ function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body,
     body: body,
     authUser: assignerEmail
   });
-
-  // Automatically open directly in Gmail in a new tab instead of invoking OS mailto/Outlook
-  try {
-    const newTab = window.open(gmailUrl, '_blank');
-    if (newTab) newTab.focus();
-  } catch(e) {
-    console.warn('Popup blocked:', e);
-  }
+  const gmailGenericUrl = buildGmailComposeGenericUrl({
+    to: recipient,
+    cc: cc || '',
+    subject: subject,
+    body: body
+  });
 
   // Display friendly modal with direct Gmail actions
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-box" style="max-width:620px;">
+    <div class="modal-box" style="max-width:640px;">
       <div class="between" style="margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="#ea4335"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
@@ -2060,28 +2196,45 @@ function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body,
         <button class="iconbtn" id="closeNoticeModal" style="font-size:18px;">✕</button>
       </div>
 
-      <div style="background:#e8f0fe;border:1px solid #c2e7ff;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#174ea6;">
-        Opening Gmail compose under <b>${esc(assignerEmail)}</b>. You can also send directly using the Gmail API below.
+      <div style="background:#e8f0fe;border:1px solid #c2e7ff;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#174ea6;line-height:1.4;">
+        Assigning email sender: <b>${esc(assignerEmail)}</b>.<br>
+        Click <b>"✉ Open in Gmail"</b> to launch the pre-filled compose window, or <b>"🚀 Send via Gmail API"</b> for 1-click delivery.
       </div>
 
       <div class="card" style="background:var(--bg);padding:12px 14px;font-size:13px;border:1px solid var(--line);">
         <div><b>Sender Account:</b> <span style="font-family:monospace;color:var(--accent);">${esc(assignerEmail)}</span></div>
         <div style="margin-top:4px;"><b>To:</b> <span style="font-family:monospace;">${esc(recipient)}</span></div>
-        ${cc ? `<div style="margin-top:4px;"><b>CC (Distribution):</b> <span style="font-family:monospace;">${esc(cc)}</span></div>` : ''}
+        ${cc ? `<div style="margin-top:4px;"><b>CC:</b> <span style="font-family:monospace;">${esc(cc)}</span></div>` : ''}
         <div style="margin-top:4px;"><b>Subject:</b> ${esc(subject)}</div>
-        ${driveLink ? `<div style="margin-top:6px;"><a href="${esc(driveLink)}" target="_blank" class="drive-badge">View in Google Drive ↗</a></div>` : ''}
-        <div style="margin-top:10px;white-space:pre-wrap;font-family:monospace;background:#fff;padding:10px;border-radius:6px;border:1px solid var(--line);max-height:160px;overflow-y:auto;font-size:12px;line-height:1.4;">${esc(body)}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          ${appReportUrl ? `<a href="${esc(appReportUrl)}" target="_blank" class="badge b-completed" style="text-decoration:none;padding:5px 12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">📱 Open Report in App ↗</a>` : ''}
+          ${driveLink ? `<a href="${esc(driveLink)}" target="_blank" class="drive-badge">View in Google Drive ↗</a>` : ''}
+        </div>
+        <div style="margin-top:10px;white-space:pre-wrap;font-family:monospace;background:#fff;padding:10px;border-radius:6px;border:1px solid var(--line);max-height:150px;overflow-y:auto;font-size:12px;line-height:1.4;">${esc(body)}</div>
       </div>
 
       <div class="between" style="margin-top:16px;flex-wrap:wrap;gap:8px;">
-        <button class="btn btn-outline" id="copyBodyBtn">📋 Copy Email Text</button>
         <div class="row">
+          <button class="btn btn-outline" id="copyBodyBtn">📋 Copy Text</button>
+          ${appReportUrl ? `<button class="btn btn-outline" id="copyModalLinkBtn">🔗 Copy App Link</button>` : ''}
+          ${onDownloadAttachment ? `<button class="btn btn-outline" id="modalDownloadAttachBtn">📄 Download File</button>` : ''}
+        </div>
+        <div class="row" style="gap:8px;align-items:center;">
           <button class="btn btn-dark" id="modalGmailApiSendBtn" style="background:#202124;color:#fff;">
             🚀 Send via Gmail API
           </button>
-          <a href="${esc(gmailUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="background:#ea4335;border-color:#ea4335;text-decoration:none;">
-            ✉ Open in Gmail
-          </a>
+          <button class="btn btn-primary" id="modalOpenGmailBtn" style="background:#ea4335;border-color:#ea4335;color:#fff;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;padding:8px 16px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            <span>✉ Open in Gmail</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;font-size:11px;color:var(--sub);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line);padding-top:8px;">
+        <span>Assigned Gmail profile: <b>${esc(assignerEmail)}</b></span>
+        <div style="display:flex;gap:12px;">
+          <a href="#" id="modalOpenCurrentAccountLink" style="color:var(--accent);text-decoration:underline;">Open in Current Gmail Profile</a>
+          <a href="${esc(gmailUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--sub);text-decoration:underline;">Direct link ↗</a>
         </div>
       </div>
     </div>`;
@@ -2089,11 +2242,49 @@ function showEmailNoticeModal({title, recipient, senderEmail, cc, subject, body,
   document.body.appendChild(overlay);
   document.getElementById('closeNoticeModal').addEventListener('click', () => overlay.remove());
 
-  document.getElementById('copyBodyBtn').addEventListener('click', () => {
+  const openInGmailWindow = (targetUrl) => {
+    try {
+      const w = window.open(targetUrl, '_blank');
+      if (!w || w.closed || typeof w.closed === 'undefined') {
+        const a = document.createElement('a');
+        a.href = targetUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => a.remove(), 150);
+      }
+    } catch(err) {
+      console.warn('window.open exception:', err);
+      window.location.assign(targetUrl);
+    }
+  };
+
+  document.getElementById('modalOpenGmailBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openInGmailWindow(gmailUrl);
+  });
+
+  document.getElementById('modalOpenCurrentAccountLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openInGmailWindow(gmailGenericUrl);
+  });
+
+  document.getElementById('copyBodyBtn')?.addEventListener('click', () => {
     const fullText = `From: ${assignerEmail}\nTo: ${recipient}${cc ? `\nCC: ${cc}` : ''}\nSubject: ${subject}\n\n${body}`;
     navigator.clipboard.writeText(fullText).then(() => {
       alert('Email content copied to clipboard!');
     });
+  });
+
+  document.getElementById('copyModalLinkBtn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(appReportUrl).then(() => {
+      alert('Direct app report link copied to clipboard!');
+    });
+  });
+
+  document.getElementById('modalDownloadAttachBtn')?.addEventListener('click', () => {
+    if(onDownloadAttachment) onDownloadAttachment();
   });
 
   document.getElementById('modalGmailApiSendBtn')?.addEventListener('click', async (e) => {
@@ -2942,8 +3133,21 @@ function render(){
 
 // Initial bootstrap
 loadLocal();
-render();
+const navigated = handleInitialUrlRouting();
+if(!navigated){
+  render();
+}
 initFirebase();
+
+window.addEventListener('popstate', () => {
+  const params = new URLSearchParams(window.location.search);
+  const rid = params.get('reportId');
+  if(rid && DB.reports.some(x => x.id === rid)){
+    openReport(rid);
+  } else if(state.view === 'wizard') {
+    setView('home');
+  }
+});
 </script>
 </body>
 </html>
