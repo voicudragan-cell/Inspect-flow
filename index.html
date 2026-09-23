@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>InspectFlow</title>
+<meta name="description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, and downloadable reports.">
+<meta property="og:title" content="InspectFlow">
+<meta property="og:description" content="Quality inspection workflow application with customizable templates, step-by-step inspection wizard, and downloadable reports.">
+<style>
+:root{
+  --bg:#f7f7f2; --panel:#ffffff; --ink:#14231c; --sub:#5c6b62; --line:#e2e3dd;
+  --brand:#16362b; --brand2:#1f4d3c; --accent:#0f7a4d; --accent-bg:#e7f3ec;
+  --fail:#c0392b; --fail-bg:#fbeae8; --warn:#b8860b; --warn-bg:#fdf3df;
+  --radius:10px;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#121712; --panel:#1a221c; --ink:#eef1ec; --sub:#9aa79f; --line:#2b342c; --accent-bg:#183527; --fail-bg:#3a2220; --warn-bg:#3a2f16; }
+}
+:root[data-theme="dark"]{ --bg:#121712; --panel:#1a221c; --ink:#eef1ec; --sub:#9aa79f; --line:#2b342c; --accent-bg:#183527; --fail-bg:#3a2220; --warn-bg:#3a2f16; }
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;}
+.sans{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;flex-wrap:wrap;gap:10px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;}
+.brand .logo{width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;}
+.brand small{display:block;color:var(--sub);font-weight:400;font-size:11px;}
+nav{display:flex;gap:8px;flex-wrap:wrap;}
+.navbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;}
+.navbtn.active{background:var(--brand);color:#fff;border-color:var(--brand);}
+main{max-width:1100px;margin:0 auto;padding:24px 20px 60px;}
+.hero{background:var(--accent-bg);border-radius:var(--radius);padding:26px 24px;margin-bottom:22px;}
+.eyebrow{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--accent);font-weight:700;}
+h1{margin:6px 0 8px;font-size:32px;}
+.hero p{color:var(--sub);margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+.card h2{font-family:Georgia,serif;font-size:20px;margin:2px 0 10px;}
+.small{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);font-weight:700;}
+label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px;font-weight:600;}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-family:inherit;font-size:14px;}
+textarea{resize:vertical;min-height:60px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px;}
+@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}}
+.btn{border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+.btn-primary{background:var(--brand);color:#fff;}
+.btn-dark{background:var(--brand2);color:#fff;}
+.btn-outline{background:transparent;border:1px solid var(--line);color:var(--ink);}
+.btn-ghost{background:transparent;border:none;color:var(--sub);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+@media(max-width:640px){.statgrid{grid-template-columns:repeat(2,1fr);}}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+.stat .n{font-size:26px;font-weight:700;font-family:Georgia,serif;}
+table{width:100%;border-collapse:collapse;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13px;}
+th{text-align:left;color:var(--sub);text-transform:uppercase;font-size:10px;letter-spacing:.05em;padding:8px 6px;border-bottom:1px solid var(--line);}
+td{padding:10px 6px;border-bottom:1px solid var(--line);}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+.b-submitted{background:var(--accent-bg);color:var(--accent);}
+.b-completed{background:#e6effa;color:#2a5fa5;}
+.b-in_progress{background:var(--warn-bg);color:var(--warn);}
+.b-not_started{background:var(--line);color:var(--sub);}
+.wizlayout{display:grid;grid-template-columns:260px 1fr;gap:18px;}
+@media(max-width:800px){.wizlayout{grid-template-columns:1fr;}.sidebar{order:2;}}
+.sidebar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;height:fit-content;}
+.sidestep{display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--sub);}
+.sidestep.current{background:var(--accent-bg);color:var(--ink);font-weight:700;}
+.sidestep .dot{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.sidestep.done .dot{background:var(--accent);border-color:var(--accent);color:#fff;}
+.progress{height:5px;background:var(--line);border-radius:4px;overflow:hidden;margin:10px 0 14px;}
+.progress > div{height:100%;background:var(--accent);}
+.chk{border-bottom:1px solid var(--line);padding:14px 10px;border-radius:8px;}
+.chk.chk-pass{background:var(--accent-bg);}
+.chk.chk-fail{background:var(--fail-bg);}
+.chk:last-child{border-bottom:none;}
+.chk .txt{font-size:14px;margin-bottom:8px;}
+.res{display:flex;gap:6px;}
+.rbtn{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--bg);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+.rbtn.pass.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.rbtn.fail.on{background:var(--fail);border-color:var(--fail);color:#fff;}
+.rbtn.na.on{background:var(--sub);border-color:var(--sub);color:#fff;}
+.decisionrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+.dbtn{flex:1;min-width:140px;padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;}
+.dbtn.on.pass{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);}
+.dbtn.on.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);}
+.dbtn.on.fail{background:var(--fail-bg);border-color:var(--fail);color:var(--fail);}
+.wizfoot{display:flex;justify-content:space-between;align-items:center;margin-top:18px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+.hint{font-size:11px;color:var(--sub);}
+.pchip{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0;}
+.pchip li{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:center;}
+.iconbtn{background:none;border:none;color:var(--sub);cursor:pointer;font-size:13px;}
+.hidden{display:none !important;}
+.tplcard{border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px;}
+.emptystate{text-align:center;color:var(--sub);padding:30px 10px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo">IF</div><div>InspectFlow<small id="syncBadge">Connecting…</small></div></div>
+  <nav>
+    <button class="navbtn" data-view="home">+ New / open report</button>
+    <button class="navbtn" data-view="dashboard">Dashboard</button>
+    <button class="navbtn" data-view="templates">Templates</button>
+    <button class="navbtn" data-view="settings">Settings</button>
+  </nav>
+</header>
+<main id="app"></main>
+<script>
+// Avoid window.alert inside iframes by displaying non-blocking notifications
+window.alert = function(msg) {
+  let toast = document.getElementById('toastNotice');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toastNotice';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--brand,#16362b);color:#fff;padding:12px 20px;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity 0.3s;max-width:90%;text-align:center;pointer-events:none;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.style.opacity = '0';
+  }, 3500);
+};
+
+const DEFAULT_TEMPLATE = {
+  id:'tpl_rollform', name:'Rollform Pre-Shipment Inspection', industry:'Utility-scale solar', category:'Rollformed mounting profiles',
+  phases:[
+    {title:'PPI — Raw material', purpose:'Verify source material, certificates, and traceability.', checkpoints:[
+      'Mill / material certificate available (EN 10204-3.1)','Galvanization certificate available (pre-galvanized material)',
+      'Material traceability confirmed — MTC per coil / batch','Applicable standard confirmed (EN 10025-2 / EN 10346 / EN ISO 1461)']},
+    {title:'DPI — Dimensions', purpose:'Confirm dimensional conformance against drawing.', checkpoints:[
+      'PAR document with company stamp / signature present','FSAR agreed and sent if applicable (S3, AQL 0.4, min 2 pcs)',
+      'HDG parts: measurements done after galvanization','All samples within drawing tolerances (AQL 0.4 — zero defects allowed)']},
+    {title:'DPI — Coating thickness', purpose:'Confirm coating thickness meets standard.', checkpoints:[
+      'Digital DFT gauge used (Elcometer® or equivalent)','HDG coating tested per DIN EN ISO 1461 Table 3',
+      'Pre-galvanized coating tested per DIN EN ISO 10346','All local thickness values ≥ minimum limit for material thickness',
+      'All mean thickness values ≥ mean limit (average of ≥5 readings per part)','Adhesion test (for special coatings)']},
+    {title:'Surface properties', purpose:'Inspect surface condition of parts.', checkpoints:[
+      'Functional surfaces free of large zinc deposits','No metal exposure on any inspected part',
+      'No red rust detected on any part','No white rust detected on any part']},
+    {title:'Cut edge treatment', purpose:'Verify treatment of cut and punched edges.', checkpoints:[
+      'Laser-cut edges on pre-galvanized parts treated with zinc paste','Saw-cut or drilled holes on pre-galvanized parts treated',
+      'Punched holes on material > 3 mm thickness treated','ZM-coated (zinc-magnesium) material > 5 mm treated',
+      'Treatment procedure correctly followed','Applied zinc paste coating ≥ 100 μm confirmed']},
+    {title:'PSI — Pre-shipment', purpose:'Final product audit before shipment.', checkpoints:[
+      'IDT PAR (Product Audit Report) present for the batch','Coating report present for the batch','Twist within limit',
+      'Straightness within limit','Certificate of Conformity (COC) present — EN 10204 Type 2.1',
+      'All packages stamped or marked by inspector','Colour Code applied correctly','Part marking verified']},
+    {title:'Packaging & storage', purpose:'Confirm packaging and storage conditions.', checkpoints:[
+      'Packaging safe for personnel — no exposed sharp edges','Parts protected from scratches and movement during transport',
+      'Rows and columns separated for ventilation — no plastic foil wrap','Warning label applied to every bundle',
+      'Pallet Label / Packaging datasheet provided','Material stored in dry conditions only — no water contact',
+      'Loading not performed in bad weather or rain']}
+  ]
+};
+let DB = {templates:[], reports:[]};
+let dbNS = null, userNS = null, syncMode = 'connecting', saveTimer = null;
+let settings = { emails: [] };
+let canEditSettings = false;
+function loadLocal(){
+  try{ DB.templates = JSON.parse(localStorage.getItem('if_templates')||'null') || [DEFAULT_TEMPLATE]; }catch(e){ DB.templates=[DEFAULT_TEMPLATE]; }
+  try{ DB.reports = JSON.parse(localStorage.getItem('if_reports')||'null') || []; }catch(e){ DB.reports=[]; }
+}
+function saveLocal(){
+  try{ localStorage.setItem('if_templates', JSON.stringify(DB.templates)); localStorage.setItem('if_reports', JSON.stringify(DB.reports)); }catch(e){}
+}
+function seedDefaultTemplate(){
+  DB.templates = [DEFAULT_TEMPLATE];
+  if(dbNS) dbNS.collection('templates').doc(DEFAULT_TEMPLATE.id).set(DEFAULT_TEMPLATE).catch(()=>{});
+  else saveLocal();
+}
+function saveTemplate(tpl){ if(dbNS){ dbNS.collection('templates').doc(tpl.id).set(tpl).catch(()=>{ saveLocal(); }); } else saveLocal(); }
+function deleteTemplateRemote(id){ if(dbNS){ dbNS.collection('templates').doc(id).delete().catch(()=>{}); } saveLocal(); }
+function saveReport(r){ if(dbNS){ dbNS.collection('reports').doc(r.id).set(r).catch(()=>{ saveLocal(); }); } else saveLocal(); }
+function debouncedSaveReport(r){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>saveReport(r), 500); }
+async function initStore(){
+  try{ dbNS = await claude.use('db'); }catch(e){ dbNS = null; }
+  try{ userNS = await claude.use('user'); canEditSettings = userNS ? (userNS.canEdit() || userNS.isOwner()) : true; }catch(e){ canEditSettings = true; }
+  if(!dbNS){ syncMode='local'; loadLocal(); render(); return; }
+  syncMode='synced';
+  dbNS.collection('templates').onSnapshot(snap=>{
+    DB.templates = snap.docs.map(d=>d.data());
+    if(!DB.templates.length) seedDefaultTemplate();
+    if(state.view==='templates'||state.view==='home') render();
+  }, ()=>{ if(!DB.templates.length){ syncMode='local'; loadLocal(); render(); } });
+  dbNS.collection('reports').onSnapshot(snap=>{
+    DB.reports = snap.docs.map(d=>d.data());
+    if(state.view==='dashboard'||state.view==='home') render();
+  }, ()=>{});
+  dbNS.doc('settings/distribution').onSnapshot(snap=>{
+    settings = snap.exists ? (snap.data()||{emails:[]}) : {emails:[]};
+    if(!Array.isArray(settings.emails)) settings.emails=[];
+    if(state.view==='settings') render();
+  }, ()=>{});
+  render();
+}
+function saveSettings(){
+  if(dbNS) dbNS.doc('settings/distribution').set(settings).catch(()=>{ alert('Only editors of this artifact can change the distribution list.'); });
+}
+function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
+function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(d){ return d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'; }
+
+let state = { view:'home', currentReportId:null, wizStep:0 };
+const app = document.getElementById('app');
+
+function setView(v){ state.view=v; document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.view===v)); render(); }
+document.querySelectorAll('.navbtn').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+
+function reportStatusCounts(){
+  const c={not_started:0,in_progress:0,completed:0,submitted:0};
+  DB.reports.forEach(r=>{ c[r.status]=(c[r.status]||0)+1; });
+  return c;
+}
+function totalChecks(r){ let t=0,d=0; r.phases.forEach(p=>p.checkpoints.forEach(c=>{ t++; if(c.result) d++; })); return {t,d}; }
+
+// ---------- HOME ----------
+function viewHome(){
+  const tplOpts = DB.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('') || '<option value="">No templates available</option>';
+  const repOpts = DB.reports.map(r=>`<option value="${r.id}">${esc(r.header.reportName||r.templateName)} — ${esc(r.header.customer||'')}</option>`).join('') || '<option value="">No reports saved yet</option>';
+  app.innerHTML = `
+  <div class="hero">
+    <div class="eyebrow">Inspection workspace</div>
+    <h1>Choose the template. Start the inspection record.</h1>
+    <p>Create every new report from an existing inspection template, then enter customer-specific inspection details in the report header.</p>
+  </div>
+  <div class="card">
+    <div class="small">New inspection</div>
+    <h2>Create a report</h2>
+    <p class="hint">Choose an existing inspection template. Customer, location, date, and inspector are entered in the report header.</p>
+    <label>Existing inspection template *</label>
+    <select id="tplSelect" ${DB.templates.length? '' : 'disabled'}>${tplOpts}</select>
+    <div style="margin-top:14px;"><button class="btn btn-primary" id="createBtn" ${DB.templates.length? '' : 'disabled'}>+ Create report from template</button></div>
+  </div>
+  <div class="card" style="background:var(--brand);color:#fff;">
+    <div class="small" style="color:#bcd; opacity:.8;">Database records</div>
+    <h2 style="color:#fff;">Retrieve a report</h2>
+    <p class="hint" style="color:#cfe0d8;">Open any saved draft, completed inspection, or submitted permanent record.</p>
+    <label style="color:#cfe0d8;">Saved report</label>
+    <select id="repSelect">${repOpts}</select>
+    <div class="row" style="margin-top:14px;">
+      <button class="btn btn-outline" id="openBtn" style="border-color:#fff;color:#fff;" ${DB.reports.length? '' : 'disabled'}>Open selected report →</button>
+      <button class="btn btn-ghost" id="toDash" style="color:#cfe0d8;">Search and filter all records →</button>
+    </div>
+  </div>`;
+  document.getElementById('createBtn')?.addEventListener('click',()=>{
+    const tid = document.getElementById('tplSelect').value; createReport(tid);
+  });
+  document.getElementById('openBtn')?.addEventListener('click',()=>{
+    const rid = document.getElementById('repSelect').value; if(rid) openReport(rid);
+  });
+  document.getElementById('toDash')?.addEventListener('click',()=>setView('dashboard'));
+}
+
+function createReport(templateId){
+  const tpl = DB.templates.find(t=>t.id===templateId); if(!tpl) return;
+  const report = {
+    id: uid('rep'), templateId: tpl.id, templateName: tpl.name, status:'not_started',
+    createdAt: Date.now(), updatedAt: Date.now(),
+    header: {reportName: tpl.name+' Inspection', customer:'', po:'', partNumbers:'', itemDesc:'', batchNumber:'', totalQty:'', batchQty:'', sampleSize:'', inspector:'', inspectorEmail:'', date:'', location:'', serviceProvider:''},
+    phases: tpl.phases.map(p=>({title:p.title, purpose:p.purpose, notes:'', checkpoints:p.checkpoints.map(c=>({text:c, result:'', note:''}))})),
+    finalNotes:'', decision:''
+  };
+  DB.reports.push(report); saveReport(report);
+  state.currentReportId = report.id; state.wizStep = -1; // -1 = header
+  setView('wizard');
+}
+function openReport(id){ state.currentReportId=id; state.wizStep=-1; setView('wizard'); }
+
+// ---------- DASHBOARD ----------
+function viewDashboard(){
+  const c = reportStatusCounts();
+  app.innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div class="eyebrow">Inspection control center</div>
+      <h1 style="margin-top:6px;">Report dashboard</h1>
+      <p class="hint" style="font-size:14px;">Track every quality record from first entry to signed submission.</p>
+    </div>
+    <button class="btn btn-primary" id="newRep">+ New report</button>
+  </div>
+  <div class="statgrid">
+    <div class="stat"><div class="small">Not started</div><div class="n">${c.not_started}</div></div>
+    <div class="stat"><div class="small">In progress</div><div class="n">${c.in_progress}</div></div>
+    <div class="stat"><div class="small">Completed</div><div class="n">${c.completed}</div></div>
+    <div class="stat"><div class="small">Submitted</div><div class="n">${c.submitted}</div></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px;"><span class="small">Filter records</span></div>
+    <div class="grid3">
+      <div><label>Report name</label><input id="fName" placeholder="Search report"></div>
+      <div><label>Customer</label><input id="fCust" placeholder="Customer name"></div>
+      <div><label>Status</label><select id="fStatus"><option value="">All statuses</option><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="submitted">Submitted</option></select></div>
+    </div>
+    <div style="margin-top:10px;"><button class="btn btn-dark" id="applyF">Apply filters</button> <button class="btn btn-ghost" id="clearF">Clear all</button></div>
+  </div>
+  <div class="card">
+    <div class="between"><div><div class="small">Saved records</div><h2 style="margin-top:2px;">${DB.reports.length} report${DB.reports.length===1?'':'s'}</h2></div></div>
+    <div id="tblWrap"></div>
+  </div>`;
+  document.getElementById('newRep').addEventListener('click',()=>setView('home'));
+  const renderTable = ()=>{
+    const nameF=(document.getElementById('fName').value||'').toLowerCase();
+    const custF=(document.getElementById('fCust').value||'').toLowerCase();
+    const statF=document.getElementById('fStatus').value;
+    const rows = DB.reports.filter(r=> (!nameF || (r.header.reportName||'').toLowerCase().includes(nameF)) &&
+      (!custF || (r.header.customer||'').toLowerCase().includes(custF)) && (!statF || r.status===statF));
+    const wrap = document.getElementById('tblWrap');
+    if(!rows.length){ wrap.innerHTML = `<div class="emptystate">No reports match this filter.</div>`; return; }
+    wrap.innerHTML = `<table><thead><tr><th>Report</th><th>Customer / Order</th><th>Inspector</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>
+      ${rows.slice().sort((a,b)=>b.updatedAt-a.updatedAt).map(r=>`<tr>
+        <td><b>${esc(r.header.reportName)}</b><br><span class="hint">${esc(r.header.partNumbers||'')}</span></td>
+        <td>${esc(r.header.customer||'—')}<br><span class="hint">${esc(r.header.po||'')}</span></td>
+        <td>${esc(r.header.inspector||'—')}</td>
+        <td>${fmtDate(r.header.date)}</td>
+        <td><span class="badge b-${r.status}">${r.status.replace('_',' ')}</span></td>
+        <td><button class="btn btn-outline" data-open="${r.id}">View →</button></td>
+      </tr>`).join('')}</tbody></table>`;
+    wrap.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openReport(b.dataset.open)));
+  };
+  ['fName','fCust','fStatus'].forEach(id=>document.getElementById(id).addEventListener('input',renderTable));
+  document.getElementById('applyF').addEventListener('click',renderTable);
+  document.getElementById('clearF').addEventListener('click',()=>{ document.getElementById('fName').value=''; document.getElementById('fCust').value=''; document.getElementById('fStatus').value=''; renderTable(); });
+  renderTable();
+}
+
+// ---------- TEMPLATES ----------
+function viewTemplates(){
+  app.innerHTML = `
+  <div class="hero">
+    <div class="eyebrow">Reusable inspection structures</div>
+    <h1>Template library</h1>
+    <p>Create every phase and checkpoint here, independently from actual inspection reports.</p>
+  </div>
+  <div class="card">
+    <div class="between"><h2>Saved templates (${DB.templates.length})</h2><button class="btn btn-primary" id="newTpl">+ New blank template</button></div>
+    <div id="tplList"></div>
+  </div>
+  <div id="tplEditorWrap"></div>`;
+  const list = document.getElementById('tplList');
+  list.innerHTML = DB.templates.map(t=>`<div class="tplcard between">
+      <div><b>${esc(t.name)}</b><br><span class="hint">${esc(t.industry||'')} · ${esc(t.category||'')} · ${t.phases.length} phases</span></div>
+      <div class="row"><button class="btn btn-outline" data-edit="${t.id}">Edit</button><button class="btn btn-ghost" data-del="${t.id}">Delete</button></div>
+    </div>`).join('') || `<div class="emptystate">No templates yet.</div>`;
+  list.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editTemplate(b.dataset.edit)));
+  list.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{ deleteTemplateRemote(b.dataset.del); DB.templates = DB.templates.filter(t=>t.id!==b.dataset.del); viewTemplates(); }));
+  document.getElementById('newTpl').addEventListener('click',()=>editTemplate(null));
+}
+function editTemplate(id){
+  let tpl = id ? JSON.parse(JSON.stringify(DB.templates.find(t=>t.id===id))) : {id:uid('tpl'), name:'', industry:'', category:'', phases:[]};
+  const wrap = document.getElementById('tplEditorWrap');
+  function renderEditor(){
+    wrap.innerHTML = `<div class="card">
+      <div class="between"><div class="small">${id?'Edit template':'New template'}</div><button class="btn btn-primary" id="saveTpl">Save template</button></div>
+      <div class="grid3">
+        <div><label>Template name *</label><input id="tName" value="${esc(tpl.name)}" placeholder="e.g. Incoming galvanized steel inspection"></div>
+        <div><label>Industry / Application *</label><input id="tInd" value="${esc(tpl.industry)}" placeholder="e.g. Utility-scale solar"></div>
+        <div><label>Category / Product *</label><input id="tCat" value="${esc(tpl.category)}" placeholder="e.g. Rollformed mounting profiles"></div>
+      </div>
+      <div id="phasesWrap"></div>
+      <button class="btn btn-outline" id="addPhase" style="margin-top:10px;">+ Add inspection phase</button>
+    </div>`;
+    const pw = document.getElementById('phasesWrap');
+    pw.innerHTML = tpl.phases.map((p,pi)=>`<div class="card" style="margin-top:14px;">
+      <div class="between"><span class="small">Phase ${String(pi+1).padStart(2,'0')}</span><button class="iconbtn" data-rmphase="${pi}">Remove</button></div>
+      <label>Phase title</label><input data-ptitle="${pi}" value="${esc(p.title)}" placeholder="Enter phase title">
+      <label>Purpose / method</label><textarea data-ppurpose="${pi}" placeholder="Purpose, method, acceptance criteria">${esc(p.purpose)}</textarea>
+      <label>Checkpoints</label>
+      <ul class="pchip" data-cklist="${pi}">${p.checkpoints.map((c,ci)=>`<li><span data-ctext="${pi}:${ci}" contenteditable="true" style="outline:none;">${esc(c)}</span><button class="iconbtn" data-rmc="${pi}:${ci}">✕</button></li>`).join('')}</ul>
+      <button class="btn btn-ghost" data-addc="${pi}">+ Add checkpoint</button>
+    </div>`).join('');
+    document.getElementById('addPhase').addEventListener('click',()=>{ tpl.phases.push({title:'',purpose:'',checkpoints:[]}); renderEditor(); });
+    pw.querySelectorAll('[data-rmphase]').forEach(b=>b.addEventListener('click',()=>{ tpl.phases.splice(+b.dataset.rmphase,1); renderEditor(); }));
+    pw.querySelectorAll('[data-ptitle]').forEach(el=>el.addEventListener('input',()=>{ tpl.phases[+el.dataset.ptitle].title = el.value; }));
+    pw.querySelectorAll('[data-ppurpose]').forEach(el=>el.addEventListener('input',()=>{ tpl.phases[+el.dataset.ppurpose].purpose = el.value; }));
+    pw.querySelectorAll('[data-addc]').forEach(b=>b.addEventListener('click',()=>{ tpl.phases[+b.dataset.addc].checkpoints.push('New checkpoint'); renderEditor(); }));
+    pw.querySelectorAll('[data-rmc]').forEach(b=>b.addEventListener('click',()=>{ const [pi,ci]=b.dataset.rmc.split(':').map(Number); tpl.phases[pi].checkpoints.splice(ci,1); renderEditor(); }));
+    pw.querySelectorAll('[data-ctext]').forEach(el=>el.addEventListener('input',()=>{ const [pi,ci]=el.dataset.ctext.split(':').map(Number); tpl.phases[pi].checkpoints[ci]=el.textContent; }));
+    document.getElementById('tName').addEventListener('input',e=>tpl.name=e.target.value);
+    document.getElementById('tInd').addEventListener('input',e=>tpl.industry=e.target.value);
+    document.getElementById('tCat').addEventListener('input',e=>tpl.category=e.target.value);
+    document.getElementById('saveTpl').addEventListener('click',()=>{
+      if(!tpl.name.trim()){ alert('Template name is required.'); return; }
+      const idx = DB.templates.findIndex(t=>t.id===tpl.id);
+      if(idx>-1) DB.templates[idx]=tpl; else DB.templates.push(tpl);
+      saveTemplate(tpl); viewTemplates();
+    });
+  }
+  renderEditor();
+}
+
+// ---------- WIZARD ----------
+function viewWizard(){
+  const r = DB.reports.find(x=>x.id===state.currentReportId);
+  if(!r){ setView('home'); return; }
+  const locked = r.status==='submitted';
+  const steps = ['Inspection header', ...r.phases.map(p=>p.title), 'Result & sign-off'];
+  const idx = state.wizStep + 1; // header = 0
+  const {t,d} = totalChecks(r);
+  const sidebar = `<div class="sidebar">
+    <div class="small">Inspection record</div>
+    <h2 style="font-size:18px;margin:4px 0 2px;">${esc(r.header.reportName)}</h2>
+    <div class="hint">${esc(r.header.po||'No PO')} · ${r.status.replace('_',' ')}</div>
+    <div class="progress"><div style="width:${t?Math.round(d/t*100):0}%"></div></div>
+    <div class="hint" style="margin-bottom:8px;">${d} / ${t} checks · ${t?Math.round(d/t*100):0}%</div>
+    ${steps.map((s,i)=>{
+      const done = i===0 ? !!r.header.customer : (i<=r.phases.length ? r.phases[i-1].checkpoints.every(c=>c.result) : r.status==='submitted');
+      const cur = i===idx;
+      return `<div class="sidestep ${cur?'current':''} ${done?'done':''}" data-step="${i-1}"><span class="dot">${done?'✓':i}</span>${esc(s)}</div>`;
+    }).join('')}
+  </div>`;
+  let content;
+  if(idx===0) content = headerStepHtml(r,locked);
+  else if(idx<=r.phases.length) content = phaseStepHtml(r, idx-1, locked);
+  else content = signoffHtml(r, locked);
+  app.innerHTML = `<div class="between" style="margin-bottom:10px;">
+      <button class="btn btn-ghost" id="backHome">← Back to workspace</button>
+      <button class="btn btn-outline" id="saveRep">Save report</button>
+    </div>
+    ${locked?'<div class="card" style="background:var(--accent-bg);color:var(--accent);padding:12px 16px;">✓ Submitted reports are locked as permanent records.</div>':''}
+    <div class="wizlayout">${sidebar}<div>${content}</div></div>`;
+  document.getElementById('backHome').addEventListener('click',()=>setView('home'));
+  document.getElementById('saveRep').addEventListener('click',()=>{ r.updatedAt=Date.now(); updateStatus(r); saveReport(r); alert('Report saved.'); });
+  app.querySelectorAll('[data-step]').forEach(el=>el.addEventListener('click',()=>{ state.wizStep=+el.dataset.step; render(); }));
+  wireStepEvents(r, idx, locked);
+}
+function updateStatus(r){
+  if(r.status==='submitted') return;
+  const {t,d}=totalChecks(r);
+  if(d===0 && !r.header.customer) r.status='not_started';
+  else if(r.status!=='completed') r.status = d===t && t>0 ? 'completed' : 'in_progress';
+}
+function headerStepHtml(r,locked){
+  const f = r.header; const dis = locked?'disabled':'';
+  const field=(id,label,ph)=>`<div><label>${label}</label><input id="${id}" ${dis} value="${esc(f[id]||'')}" placeholder="${ph||'-'}"></div>`;
+  const complete = f.customer && f.inspector && f.inspectorEmail;
+  return `<div class="card"><div class="small">Step 1 of ${1+DB.reports.find(x=>x.id===r.id).phases.length+1}</div><h2>Inspection header</h2>
+    <div class="grid2">
+      ${field('reportName','Report name')}${field('customer','Supplier / Customer')}
+      ${field('po','PO Number')}${field('partNumbers','Part Number(s)')}
+      ${field('itemDesc','Item Description')}${field('batchNumber','Batch Number')}
+      ${field('totalQty','Total Quantity')}${field('batchQty','Batch Quantity')}
+      ${field('sampleSize','Sample Size (ISO 2859-1 S3)')}${field('inspector','Inspector')}
+      <div><label>Inspector email</label><input id="inspectorEmail" type="email" ${dis} value="${esc(f.inspectorEmail||'')}" placeholder="inspector@company.com"></div>
+      <div><label>Inspection Date</label><input id="date" type="date" ${dis} value="${esc(f.date||'')}"></div>
+      ${field('location','Location / Site')}
+      ${field('serviceProvider','Service Provider')}
+    </div>
+    <div class="wizfoot">
+      <button class="btn btn-outline" id="sendInspector" ${complete&&!locked?'':'disabled'}>✉ Send to inspector</button>
+      <button class="btn btn-primary" id="nextStep">Next →</button>
+    </div>
+    ${!complete?'<div class="hint" style="margin-top:6px;">Fill in Supplier, Inspector, and Inspector email to enable direct send.</div>':''}
+  </div>`;
+}
+function phaseStepHtml(r, pi, locked){
+  const p = r.phases[pi];
+  return `<div class="card"><div class="small">Step ${pi+2} of ${r.phases.length+2}</div><h2>${esc(p.title)}</h2>
+    <p class="hint">${esc(p.purpose||'')}</p>
+    ${p.checkpoints.map((c,ci)=>`<div class="chk ${c.result==='Pass'?'chk-pass':c.result==='Fail'?'chk-fail':''}"><div class="txt">${ci+1}. ${esc(c.text)}</div>
+      <div class="res">
+        <button class="rbtn pass ${c.result==='Pass'?'on':''}" data-r="${pi}:${ci}:Pass" ${locked?'disabled':''}>Pass</button>
+        <button class="rbtn fail ${c.result==='Fail'?'on':''}" data-r="${pi}:${ci}:Fail" ${locked?'disabled':''}>Fail</button>
+        <button class="rbtn na ${c.result==='N/A'?'on':''}" data-r="${pi}:${ci}:N/A" ${locked?'disabled':''}>N/A</button>
+      </div>
+      <input style="margin-top:8px;${(c.result==='Fail'||c.result==='N/A')&&!c.note.trim()?'border-color:var(--fail);':''}" data-note="${pi}:${ci}" ${locked?'disabled':''} value="${esc(c.note)}" placeholder="${(c.result==='Fail'||c.result==='N/A')?'Explanation required for '+c.result:'Comments or evidence (optional)'}">
+      ${(c.result==='Fail'||c.result==='N/A')&&!c.note.trim()?'<div class="hint" style="color:var(--fail);margin-top:3px;">Explanation required</div>':''}</div>`).join('')}
+    <label>Section notes</label><textarea data-secnote="${pi}" ${locked?'disabled':''} placeholder="Any additional findings or remarks">${esc(p.notes)}</textarea>
+    <div class="wizfoot"><button class="btn btn-outline" id="prevStep">← Previous</button><button class="btn btn-primary" id="nextStep">Complete &amp; continue →</button></div>
+  </div>`;
+}
+function signoffHtml(r, locked){
+  const decisions=[['Pass','pass','✓'],['Pass with reservations','warn','!'],['Fail','fail','✕']];
+  return `<div class="card"><div class="small">Step ${r.phases.length+2} of ${r.phases.length+2} · Final review</div><h2>Result &amp; sign-off</h2>
+    <label>Final notes — overall observations (optional)</label>
+    <textarea id="finalNotes" ${locked?'disabled':''} placeholder="Summarize final findings or reservations...">${esc(r.finalNotes)}</textarea>
+    <label>Overall inspection decision *</label>
+    <div class="decisionrow">${decisions.map(([label,cls,ic])=>`<button class="dbtn ${cls} ${r.decision===label?'on':''}" data-dec="${label}" ${locked?'disabled':''}>${ic} ${label}</button>`).join('')}</div>
+    <div class="wizfoot">
+      <button class="btn btn-outline" id="prevStep">← Previous</button>
+      <div class="row">
+        <button class="btn btn-outline" id="dlBtn">↓ Download report</button>
+        <button class="btn btn-outline" id="emailDistBtn">✉ Email distribution list</button>
+        ${locked? '<button class="btn btn-primary" disabled>Submitted</button>' : '<button class="btn btn-primary" id="submitBtn">Submit report</button>'}
+      </div>
+    </div>
+    <div class="hint" style="margin-top:8px;">Complete the report identity, every phase, and the final decision to download or submit. Submitting downloads the report and emails it to: ${esc(settings.emails.join(', ')||'no recipients configured — set them in Settings')}.</div>
+  </div>`;
+}
+function wireStepEvents(r, idx, locked){
+  if(idx===0){
+    ['reportName','customer','po','partNumbers','itemDesc','batchNumber','totalQty','batchQty','sampleSize','inspector','inspectorEmail','location','serviceProvider'].forEach(id=>{
+      document.getElementById(id)?.addEventListener('input',e=>{ r.header[id]=e.target.value; updateStatus(r); debouncedSaveReport(r); });
+    });
+    document.getElementById('date')?.addEventListener('input',e=>{ r.header.date=e.target.value; debouncedSaveReport(r); });
+    document.getElementById('nextStep')?.addEventListener('click',()=>{ state.wizStep=0; render(); });
+    document.getElementById('sendInspector')?.addEventListener('click',()=>emailReport(r,[r.header.inspectorEmail],'inspector'));
+  } else if(idx<=r.phases.length){
+    const pi = idx-1;
+    app.querySelectorAll('[data-r]').forEach(b=>b.addEventListener('click',()=>{
+      const [pI,cI,val]=b.dataset.r.split(':'); r.phases[+pI].checkpoints[+cI].result = val; updateStatus(r); saveReport(r); render();
+    }));
+    app.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('input',()=>{ const [pI,cI]=el.dataset.note.split(':'); r.phases[+pI].checkpoints[+cI].note=el.value; debouncedSaveReport(r); }));
+    document.querySelector('[data-secnote]')?.addEventListener('input',e=>{ r.phases[pi].notes=e.target.value; debouncedSaveReport(r); });
+    document.getElementById('prevStep')?.addEventListener('click',()=>{ state.wizStep=pi-1; render(); });
+    document.getElementById('nextStep')?.addEventListener('click',()=>{
+      const missing = r.phases[pi].checkpoints.filter(c=>(c.result==='Fail'||c.result==='N/A') && !c.note.trim());
+      if(missing.length){ alert('Add a comment/explanation for every Fail or N/A result before continuing ('+missing.length+' missing).'); return; }
+      state.wizStep=pi+1; render();
+    });
+  } else {
+    document.getElementById('finalNotes')?.addEventListener('input',e=>{ r.finalNotes=e.target.value; debouncedSaveReport(r); });
+    app.querySelectorAll('[data-dec]').forEach(b=>b.addEventListener('click',()=>{ r.decision=b.dataset.dec; saveReport(r); render(); }));
+    document.getElementById('prevStep')?.addEventListener('click',()=>{ state.wizStep=r.phases.length-1; render(); });
+    document.getElementById('submitBtn')?.addEventListener('click',()=>{
+      const {t,d}=totalChecks(r);
+      if(!r.header.customer || !r.header.inspector){ alert('Complete the report header (Customer, Inspector) before submitting.'); return; }
+      if(d<t){ alert('Every checkpoint must have a result before submitting.'); return; }
+      const missing = r.phases.some(p=>p.checkpoints.some(c=>(c.result==='Fail'||c.result==='N/A') && !c.note.trim()));
+      if(missing){ alert('Every Fail or N/A checkpoint needs an explanation before submitting.'); return; }
+      if(!r.decision){ alert('Select an overall inspection decision before submitting.'); return; }
+      r.status='submitted'; r.updatedAt=Date.now(); saveReport(r);
+      if(settings.emails.length) emailReport(r, settings.emails, 'distribution'); else downloadReport(r);
+      render();
+    });
+    document.getElementById('dlBtn')?.addEventListener('click',()=>downloadReport(r));
+    document.getElementById('emailDistBtn')?.addEventListener('click',()=>emailReport(r, settings.emails, 'distribution'));
+  }
+}
+function buildTemplateHtml(r){
+  const {t} = totalChecks(r);
+  let passN=0,failN=0,naN=0;
+  r.phases.forEach(p=>p.checkpoints.forEach(c=>{ if(c.result==='Pass')passN++; else if(c.result==='Fail')failN++; else if(c.result==='N/A')naN++; }));
+  const chk = lbl => `${r.decision===lbl?'[X]':'[ ]'} ${lbl}`;
+  let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(r.header.reportName)}</title>
+  <style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;}h1{font-size:16pt;text-align:center;}table{border-collapse:collapse;width:100%;margin-bottom:14px;}td,th{border:1px solid #999;padding:5px 8px;font-size:10pt;text-align:left;}th{background:#eee;}.pass{color:#0f7a4d;font-weight:bold;}.fail{color:#c0392b;font-weight:bold;}.center{text-align:center;}</style></head><body>
+  <h1>${esc(r.header.reportName)}</h1><p style="text-align:center;color:#888;">Generated via InspectFlow</p>
+  <table>
+    <tr><td><b>Supplier</b></td><td>${esc(r.header.customer||'-')}</td><td><b>PO Number</b></td><td>${esc(r.header.po||'-')}</td></tr>
+    <tr><td><b>Part Number(s)</b></td><td>${esc(r.header.partNumbers||'-')}</td><td><b>Item Description</b></td><td>${esc(r.header.itemDesc||'-')}</td></tr>
+    <tr><td><b>Batch Number</b></td><td>${esc(r.header.batchNumber||'-')}</td><td><b>Total / Batch Qty</b></td><td>${esc(r.header.totalQty||'-')} / ${esc(r.header.batchQty||'-')}</td></tr>
+    <tr><td><b>Sample Size</b></td><td>${esc(r.header.sampleSize||'-')}</td><td><b>Inspector</b></td><td>${esc(r.header.inspector||'-')}</td></tr>
+    <tr><td><b>Inspection Date</b></td><td>${fmtDate(r.header.date)}</td><td><b>Location / Site</b></td><td>${esc(r.header.location||'-')}</td></tr>
+    <tr><td><b>Service Provider</b></td><td colspan="3">${esc(r.header.serviceProvider||'-')}</td></tr>
+  </table>
+  <h2>Overall Result &amp; Sign-off</h2>
+  <table><tr><th class="center">Passed</th><th class="center">Failed</th><th class="center">N/A</th><th class="center">Total</th></tr>
+  <tr><td class="center">${passN}</td><td class="center">${failN}</td><td class="center">${naN}</td><td class="center">${t}</td></tr></table>
+  <p><b>Overall inspection decision:</b> ${chk('Pass')} &nbsp; ${chk('Pass with reservations')} &nbsp; ${chk('Fail')}</p>
+  <p><b>Final notes:</b> ${esc(r.finalNotes||'-')}</p>
+  <table><tr><td><b>Inspector name</b></td><td>${esc(r.header.inspector||'-')}</td><td><b>Date</b></td><td>${fmtDate(r.header.date)}</td></tr></table>`;
+  r.phases.forEach((p,pi)=>{
+    html += `<h2>${esc(p.title)}</h2><table><tr><th>Checkpoint</th><th>Result</th><th>Finding / Note</th></tr>`;
+    p.checkpoints.forEach((c,ci)=>{ const cls = c.result==='Pass'?'pass':c.result==='Fail'?'fail':''; html+=`<tr><td>${pi+1}.${ci+1} ${esc(c.text)}</td><td class="${cls}">${c.result||'-'}</td><td>${esc(c.note||'-')}</td></tr>`; });
+    html += `</table>`;
+    if(p.notes) html += `<p><i>Section notes: ${esc(p.notes)}</i></p>`;
+    if(/coating thickness/i.test(p.title)){
+      html += `<p><b>Reference: HDG minimum coating thickness (DIN EN ISO 1461 Table 3)</b></p>
+      <table><tr><th>Steel thickness</th><th>Local min (\u03bcm)</th><th>Mean min (\u03bcm)</th></tr>
+      <tr><td>&gt; 6 mm</td><td>70</td><td>85</td></tr><tr><td>&gt; 3 mm to \u2264 6 mm</td><td>55</td><td>70</td></tr>
+      <tr><td>\u2265 1.5 mm to \u2264 3 mm</td><td>45</td><td>55</td></tr><tr><td>&lt; 1.5 mm</td><td>35</td><td>45</td></tr></table>`;
+    }
+  });
+  html += `</body></html>`;
+  return html;
+}
+function downloadReport(r){
+  const html = buildTemplateHtml(r);
+  const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=(r.header.reportName||'inspection-report').replace(/\s+/g,'_')+'.doc'; a.click(); URL.revokeObjectURL(url);
+}
+function emailReport(r, recipients, kind){
+  recipients = (recipients||[]).map(e=>(e||'').trim()).filter(Boolean);
+  if(!recipients.length){ alert(kind==='inspector' ? 'Enter the inspector email first.' : 'Add at least one recipient in Settings before emailing.'); return; }
+  downloadReport(r);
+  const subject = encodeURIComponent(`Inspection report: ${r.header.reportName} (${r.status})`);
+  const body = encodeURIComponent(`Report: ${r.header.reportName}\nSupplier: ${r.header.customer||'-'}\nStatus: ${r.status}\nDecision: ${r.decision||'-'}\n\nThe formatted report file was just downloaded to this device — attach it to this email before sending (browsers can't attach files to emails automatically).`);
+  setTimeout(()=>{
+    const mailLink = document.createElement('a');
+    mailLink.href = `mailto:${recipients.join(',')}?subject=${subject}&body=${body}`;
+    mailLink.click();
+  }, 400);
+}
+
+// ---------- SETTINGS ----------
+function viewSettings(){
+  app.innerHTML = `<div class="hero"><div class="eyebrow">App owner controls</div><h1>Distribution settings</h1>
+    <p>Every submitted and downloaded report is emailed to this list. Only editors of this artifact can change it.</p></div>
+  <div class="card">
+    <h2>Report distribution list</h2>
+    ${canEditSettings ? `<div class="row"><input id="newEmail" placeholder="name@company.com" style="max-width:280px;"><button class="btn btn-dark" id="addEmail">+ Add</button></div>` : `<p class="hint">You have view access — ask an editor to update this list.</p>`}
+    <ul class="pchip" style="margin-top:12px;">${settings.emails.map(e=>`<li>${esc(e)} ${canEditSettings?`<button class="iconbtn" data-rme="${esc(e)}">✕</button>`:''}</li>`).join('') || '<li class="hint" style="border:none;">No recipients configured yet.</li>'}</ul>
+  </div>`;
+  document.getElementById('addEmail')?.addEventListener('click',()=>{
+    const v = document.getElementById('newEmail').value.trim();
+    if(!v || !v.includes('@')){ alert('Enter a valid email address.'); return; }
+    if(!settings.emails.includes(v)) settings.emails.push(v);
+    saveSettings(); viewSettings();
+  });
+  app.querySelectorAll('[data-rme]').forEach(b=>b.addEventListener('click',()=>{ settings.emails = settings.emails.filter(e=>e!==b.dataset.rme); saveSettings(); viewSettings(); }));
+}
+
+function render(){
+  const badge = document.getElementById('syncBadge');
+  if(badge) badge.textContent = syncMode==='synced' ? 'Synced · shared database' : (syncMode==='local' ? 'Local only (this device)' : 'Connecting…');
+  if(state.view==='home') viewHome();
+  else if(state.view==='dashboard') viewDashboard();
+  else if(state.view==='templates') viewTemplates();
+  else if(state.view==='settings') viewSettings();
+  else if(state.view==='wizard') viewWizard();
+}
+document.querySelector('[data-view="home"]').classList.add('active');
+render();
+initStore();
+</script>
+</body>
+</html>
